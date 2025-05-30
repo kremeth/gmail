@@ -15,6 +15,7 @@ EMAIL_PASSWORD = 'cqis dzyt ttqz yica'  # Use Gmail App Password
 # AUTHENTICATE WITH GOOGLE SHEETS
 # -----------------------------
 scopes = ['https://www.googleapis.com/auth/spreadsheets']
+GOOGLE_CREDENTIALS = json.loads(os.environ['GOOGLE_CREDENTIALS'])
 creds = Credentials.from_service_account_file(GOOGLE_CREDENTIALS, scopes=scopes)
 client = gspread.authorize(creds)
 
