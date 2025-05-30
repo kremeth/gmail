@@ -1,1 +1,1 @@
-web: gunicorn gmail:app
+worker: python gmail.py
