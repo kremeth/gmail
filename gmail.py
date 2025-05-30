@@ -2,6 +2,7 @@ import gspread
 import time
 from google.oauth2.service_account import Credentials
 import smtplib
+import json
 from email.message import EmailMessage
 
 # -----------------------------
