@@ -1,30 +1,28 @@
 import gspread
 import time
-from google.oauth2.service_account import Credentials
+import random
 import smtplib
+from email.message import EmailMessage
+from google.oauth2.service_account import Credentials
 import json
 import os
-from email.message import EmailMessage
 
 # -----------------------------
 # CONFIGURATION
 # -----------------------------
 SHEET_URL = 'https://docs.google.com/spreadsheets/d/1yhShQay-yFhqolaa3CuMoUQ1705uiqefaBubkGGZvrA/edit?gid=0#gid=0'
 EMAIL_ADDRESS = 'mathieu.kremeth@gmail.com'
-EMAIL_PASSWORD = 'cqis dzyt ttqz yica'  # Use Gmail App Password
+EMAIL_PASSWORD = 'cqis dzyt ttqz yica'  # Gmail App Password
+SPREADSHEET_COL_BLURB = 3  # Assumes 'Blurb' is in column C
 
 # -----------------------------
-# AUTHENTICATE WITH GOOGLE SHEETS
+# GOOGLE SHEETS AUTHENTICATION
 # -----------------------------
 scopes = ['https://www.googleapis.com/auth/spreadsheets']
-# Parse the JSON string from the Heroku config var
 creds_dict = json.loads(os.environ['GOOGLE_CREDENTIALS'])
-
-# Use from_service_account_info instead of from_service_account_file
 creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
 client = gspread.authorize(creds)
-
-sheet = client.open_by_url(SHEET_URL).sheet1  # Adjust if not first sheet
+sheet = client.open_by_url(SHEET_URL).sheet1
 data = sheet.get_all_records()
 
 # -----------------------------
@@ -33,8 +31,10 @@ data = sheet.get_all_records()
 def send_email(to_email, first_name):
     msg = EmailMessage()
     msg['Subject'] = 'Nutricode Pre-Seed'
-    msg['From'] = EMAIL_ADDRESS
+    msg['From'] = f"Mathieu Kremeth <{EMAIL_ADDRESS}>"
     msg['To'] = to_email
+    msg['Reply-To'] = EMAIL_ADDRESS
+    msg['List-Unsubscribe'] = f"<mailto:{EMAIL_ADDRESS}>"
 
     msg.set_content(f"""\
 Hi {first_name},
@@ -62,21 +62,37 @@ Mathieu
         smtp.send_message(msg)
 
 # -----------------------------
-# LOOP THROUGH CONTACTS
+# SENDING LOOP WITH DELAY AND ERROR HANDLING
 # -----------------------------
-for i, row in enumerate(data, start=2):  # start=2 to match actual row number in Sheet (accounting for header)
-    name = row['Investor']
-    email = row['Linkedin/email']
+emails_sent = 0
+MAX_DAILY_LIMIT = 300
+
+for i, row in enumerate(data, start=2):
+    if emails_sent >= MAX_DAILY_LIMIT:
+        print("🚫 Reached daily sending limit. Stopping.")
+        break
+
+    name = row.get('Investor', '')
+    email = row.get('Linkedin/email', '')
+    # email = 'm42611638@gmail.com'
     blurb = row.get('Blurb', '').strip().upper()
 
     if blurb != 'Y' and email:
-        first_name = name.split()[0]
+        first_name = name.split()[0] if name else 'there'
         try:
             send_email(email, first_name)
+            sheet.update_cell(i, SPREADSHEET_COL_BLURB, 'Y')
             print(f"✅ Sent to {first_name} at {email}")
-            sheet.update_cell(i, 3, 'Y')  # Column 3 is 'Blurb' assuming it's the third column
+            emails_sent += 1
+
+            if emails_sent % 50 == 0:
+                print("⏸️ Batch complete. Taking a longer 5-minute break...")
+                time.sleep(300)
+            else:
+                sleep_time = random.uniform(180, 240)
+                print(f"⏱️ Sleeping for {int(sleep_time)} seconds...")
+                time.sleep(sleep_time)
+
         except Exception as e:
             print(f"❌ Failed to send to {email}: {e}")
-        time.sleep(180)  # Sleep for 3 minutes
-
-
+            continue
